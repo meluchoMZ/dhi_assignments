@@ -26,6 +26,7 @@ void loop(void)
 		;
 	}
 	digitalWrite(green, LOW);
+	delay(20);
 	while(digitalRead(button) != LOW) 
 	{
 		;

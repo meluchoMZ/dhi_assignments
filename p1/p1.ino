@@ -37,7 +37,7 @@ void loop(void)
 	del = random(400, 1201);
 	count = del;
 	start = millis();
-	// pooling cada 10ms mentres non se pulse o boton ou pase o tempo
+	// pooling cada ms mentres non se pulse o boton ou pase o tempo
 	while(digitalRead(button) != HIGH && count > 0)
 	{
 		delay(1);
@@ -54,12 +54,12 @@ void loop(void)
 		digitalWrite(red, LOW);
 	}
 	// calculanse os tempos
-	time = millis()-start;
 	// esperase depulsarse
 	while (digitalRead(button) != LOW) 
 	{
 		;
 	}
+	time = millis()-start;
 	// imprimese por porto serie
 	if (time <= del) {
 		Serial.println("Non se precipite. Tente de novo");

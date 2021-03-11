@@ -12,13 +12,13 @@ volatile int h = 0, m = 0, s = 0;
 volatile bool pinState = HIGH, sleeping = false;
 
 void timer2_interruption_handler(void);
-void goto_sleep(void);
+void sleepNow(void);
 void sleep_irs(void);
 
 void setup(void)
 {
-	// inicializase comunicacion serie a 115200 baudios
-	Serial.begin(115200);
+	// inicializase comunicacion serie
+	Serial.begin(9600);
 	// inicializanse os pins
 	pinMode(button, INPUT);
 	pinMode(green, OUTPUT);
@@ -27,7 +27,7 @@ void setup(void)
 	MsTimer2::set(1000, timer2_interruption_handler);
 	MsTimer2::start();
 	// asignaselle á interrupcion provocada polo pin 3 a irs "sleep_irs"
-	attachInterrupt(digitalPinToInterrupt(3), sleep_irs, RISING);
+	attachInterrupt(INT1, sleep_irs, HIGH);
 	// configúrase o modo de sleep
 	set_sleep_mode(SLEEP_MODE_EXT_STANDBY);
 }
@@ -36,23 +36,40 @@ void loop(void)
 {
 	int hprov, mprov, sprov;
 	// compróbase se hai datos de entrada no porto serie
-	if (Serial.available() > 0) {
-		// extráense os valores para poñer o reloxo en hora
-		hprov = Serial.parseInt(SKIP_ALL);
-		mprov = Serial.parseInt(SKIP_ALL);
-		sprov = Serial.parseInt(SKIP_ALL);
-		// baldeirase o buffer de entrada pra descartar os datos de mais
-		while (Serial.available() > 0)
-		{
-			Serial.read();
-		}
-		// se a hora non cadra, pasa a modo sleep
-		if ((hprov<0)||(hprov>23)||(mprov<0)||(mprov>59)||(sprov<0)||(sprov>59)) {
-			Serial.println("Paso a modo sleep");
-			goto_sleep();
-		} else {
-			// actualízase a hora do reloxo
-			h = hprov; m = mprov; s = sprov;
+	if (sleeping) {
+		// segue durmindo
+		sleepNow();
+	} else {
+		if (Serial.available() > 0) {
+			// extráense os valores para poñer o reloxo en hora
+			hprov = Serial.parseInt();
+			mprov = Serial.parseInt();
+			sprov = Serial.parseInt();
+			// baldeirase o buffer de entrada pra descartar os datos de mais
+			while (Serial.available() > 0)
+			{
+				Serial.read();
+			}
+			// se a hora non cadra, pasa a modo sleep
+			if ((hprov<0)||(hprov>23)||(mprov<0)||(mprov>59)||(sprov<0)||(sprov>59)) {
+				Serial.println("Paso a modo sleep");
+				// espérase a que baldeire o buffer de saída
+				Serial.flush();
+				sleeping = true;
+				// apaga os leds 
+				digitalWrite(green, LOW);
+				digitalWrite(red, LOW);
+				// modo sleep
+				sleepNow();
+				// baldeirase o buffer cando esperta por se quedaron datos no buffer pra que non cambie a hora
+				while (Serial.available() > 0)
+				{
+					Serial.read();
+				}
+			} else {
+				// actualízase a hora do reloxo
+				h = hprov; m = mprov; s = sprov;
+			}
 		}
 	}
 }
@@ -75,7 +92,7 @@ void timer2_interruption_handler(void)
 	if (!sleeping) {
 		Serial.print(h, DEC); Serial.print(":");
 		Serial.print(m, DEC); Serial.print(":");
-		Serial.println(s, DEC); 
+		Serial.println(s, DEC); Serial.flush();
 		digitalWrite(green, pinState);
 		digitalWrite(red, !pinState);
 	}
@@ -89,12 +106,8 @@ void sleep_irs(void)
 }
 
 // rutina de modo aforro de enerxía
-void goto_sleep(void)
+void sleepNow(void)
 {
-	sleeping = true;
-	// apaga os leds 
-	digitalWrite(green, LOW);
-	digitalWrite(red, LOW);
 	sleep_enable();
 	sei();
 	sleep_cpu();

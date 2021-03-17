@@ -5,6 +5,7 @@
   **/
 #include <SPI.h>
 #include <LiquidCrystal.h>
+#include <EEPROM.h>
 
 #define BUTTON 7 
 #define LCD_CONTRAST 6
@@ -13,9 +14,8 @@
 #define LED_ROULETTE_MIN_TIME_MS 7000 // minimo tempo que duran os leds en ruleta
 #define LED_ROULETTE_MAX_TIME_MS 8500 // maximo tempo que duran os leds en ruleta
 #define LED_BLINK_DELAY 75 // retraso inicial dos leds da ruleta
-#define PRIZE_NUMBER 4 // numero de premios
+#define EEPROM_VALID_BYTES 0x4 // numero valido de bytes da EEPROM, neste caso son 4 posto que son 4 premios e o máximo valor é 10
 
-byte prizes[PRIZE_NUMBER] = {0x1, 0x2, 0x5, 0xA}; // premios concretos 
 // inicio lcd e asignación de pins
 LiquidCrystal lcd(8,9,5,4,3,2);
 
@@ -26,6 +26,7 @@ void raffle(void);
 void update_lcd(void);
 void out_of_existences(void);
 void clear_lcd(void);
+void reset_EEPROM(void);
 
 
 void setup(void)
@@ -34,13 +35,17 @@ void setup(void)
 	randomSeed(analogRead(0));
 	// configuración do botón de inicio
 	pinMode(BUTTON, INPUT);
-	pinMode(BUTTON, LOW);
+	//pinMode(BUTTON, LOW);
+	// detección do reset
+	if (digitalRead(BUTTON) == HIGH) {
+		// reseteo de EEPROM
+		reset_EEPROM();
+	}
 	// configuración LCD
 	lcd.begin(16,2);
 	analogWrite(LCD_CONTRAST,60);
 	clear_lcd();
-	lcd.setCursor(0,0); lcd.print("Xogue e ganhe!");
-	lcd.setCursor(0,1); lcd.print("Prema o pulsador");
+	update_lcd();
 	// configuración de pins de SPI
 	pinMode(SS, OUTPUT); // Slave Select
 	digitalWrite(SS, LOW);
@@ -89,17 +94,23 @@ void raffle(void)
 	short value = 0x0, del = random(LED_ROULETTE_MIN_TIME_MS, LED_ROULETTE_MAX_TIME_MS);
 	byte b, winner;
 
-	// reset da pantalla lcd 
-	clear_lcd(); update_lcd();
 	// calcula a o resultado da tirada
-	for (b = 0b0; b < PRIZE_NUMBER; b++) {
-		value += prizes[b];
+	for (b = 0b0; b < EEPROM_VALID_BYTES; b++) {
+		value += EEPROM.read(b);
+	}
+	if (value == 0) {
+		SPI.transfer(0xF);
+		digitalWrite(SS, HIGH);
+		digitalWrite(SS, LOW);
+		clear_lcd();
+		out_of_existences();
+		return;
 	}
 	winner = random(1,value);
 	value = 0x0;
 	// asigna o premio gañado
-	for (b = 0b0; b < PRIZE_NUMBER; b++) {
-		value += prizes[b];
+	for (b = 0b0; b < EEPROM_VALID_BYTES; b++) {
+		value += EEPROM.read(b);
 		if (winner <= value) {
 			winner = b;
 			break;
@@ -131,8 +142,8 @@ void raffle(void)
 
 	// actualizase o lcd (se hai premios resta, senón devolve unha mensaxe de erro)
 	clear_lcd();
-	if (prizes[winner] > 0) {
-		prizes[winner]--;
+	if (EEPROM.read(winner) > 0) {
+		EEPROM.update(winner, EEPROM.read(winner)-1);
 		update_lcd();
 	} else {
 		out_of_existences();
@@ -145,19 +156,19 @@ void update_lcd(void)
 	lcd.setCursor(1,0);
 	lcd.print("P1:");
 	lcd.setCursor(4,0);
-	lcd.print(prizes[0]);
+	lcd.print(EEPROM.read(0x0));
 	lcd.setCursor(11,0);
 	lcd.print("P2:");
 	lcd.setCursor(14,0);
-	lcd.print(prizes[1]);
+	lcd.print(EEPROM.read(0x1));
 	lcd.setCursor(1,1);
 	lcd.print("P3:");
 	lcd.setCursor(4,1);
-	lcd.print(prizes[2]);
+	lcd.print(EEPROM.read(0x2));
 	lcd.setCursor(11,1);
 	lcd.print("P4:");
 	lcd.setCursor(14,1);
-	lcd.print(prizes[3]);
+	lcd.print(EEPROM.read(0x3));
 }
 
 void out_of_existences(void)
@@ -176,4 +187,12 @@ void clear_lcd(void)
 		lcd.setCursor(b, 1);
 		lcd.print(" ");
 	}
+}
+
+void reset_EEPROM(void)
+{
+	EEPROM.update(0x0, 0x1);
+	EEPROM.update(0x1, 0x2);
+	EEPROM.update(0x2, 0x5);
+	EEPROM.update(0x3, 0xA);
 }

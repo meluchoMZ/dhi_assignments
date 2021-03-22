@@ -6,6 +6,7 @@
 #include <SPI.h>
 #include <LiquidCrystal.h>
 #include <EEPROM.h>
+#include <avr/wdt.h>
 
 #define BUTTON 7 
 #define LCD_CONTRAST 6
@@ -13,8 +14,9 @@
 #define LED_BLINK_ORDER 0b1000 // B = 0x1000; R = 0x0100; Y = 0x0010; G = 0x0001 Orde de cambio dos leds 
 #define LED_ROULETTE_MIN_TIME_MS 7000 // minimo tempo que duran os leds en ruleta
 #define LED_ROULETTE_MAX_TIME_MS 8500 // maximo tempo que duran os leds en ruleta
-#define LED_BLINK_DELAY 75 // retraso inicial dos leds da ruleta
+#define LED_BLINK_DELAY 45 // retraso inicial dos leds da ruleta
 #define EEPROM_VALID_BYTES 0x4 // numero valido de bytes da EEPROM, neste caso son 4 posto que son 4 premios e o máximo valor é 10
+#define SPI_ERROR "Error de bus SPI"
 
 // inicio lcd e asignación de pins
 LiquidCrystal lcd(8,9,5,4,3,2);
@@ -56,6 +58,8 @@ void setup(void)
 	digitalWrite(SS, HIGH);
 	digitalWrite(SS, LOW);
 	delay(500);
+	// configuración do watch dog
+	wdt_enable(WDTO_2S);
 }
 
 void loop(void)
@@ -65,6 +69,7 @@ void loop(void)
 		raffle();
 		fire = false;
 	}
+	wdt_reset();
 }
 
 // le o valor do botón. Marca se se debe realizar o sorteo (FIRE)
@@ -118,26 +123,41 @@ void raffle(void)
 	}
 	value = 0x0;
 	// Efecto da ruleta de leds 
+	wdt_reset();
 	while (del > 0)
 	{
 		value += LED_BLINK_DELAY;
+		// purgase o latch do SN74HC595N
+		SPI.transfer(0x08); digitalWrite(SS, HIGH); digitalWrite(SS, LOW);
 		// a orde faise con desprazamentos de bits sobre unha macro
 		for (b = 0b0; b < LED_BLINK_ORDER >> 0b1; b++) {
-			SPI.transfer(LED_BLINK_ORDER >> b);
+			if (SPI.transfer(LED_BLINK_ORDER >> b) != (LED_BLINK_ORDER >> b-0b1)) {
+				clear_lcd();
+				lcd.print(SPI_ERROR);
+				return;
+			}
 			digitalWrite(SS, HIGH);
 			digitalWrite(SS, LOW);
 			delay(LED_BLINK_DELAY+value);
 			del -= LED_BLINK_DELAY+value;
 		}
+		wdt_reset();
 	}
 
+	Serial.println("funcionou");
 	// move o led ata o correspondente a o premio gañado 
 	while ((b%0b100) != winner)
 	{
-		SPI.transfer(LED_BLINK_ORDER >> ((b++)%0b100));
+		if (SPI.transfer(LED_BLINK_ORDER >> ((b++)%0b100)) != (LED_BLINK_ORDER >> ((b-0b10)%0b100))) {
+			clear_lcd();
+			lcd.setCursor(0,0);
+			lcd.print(SPI_ERROR);
+			return;
+		}
 		digitalWrite(SS, HIGH);
 		digitalWrite(SS, LOW);
 		delay(LED_BLINK_DELAY+value);
+		wdt_reset();
 	}
 
 	// actualizase o lcd (se hai premios resta, senón devolve unha mensaxe de erro)
@@ -181,11 +201,12 @@ void out_of_existences(void)
 
 void clear_lcd(void)
 {
+	char blank = ' ';
 	for (byte b = 0x0; b <= 0xF; b++) {
 		lcd.setCursor(b, 0);
-		lcd.print(" ");
+		lcd.print(blank);
 		lcd.setCursor(b, 1);
-		lcd.print(" ");
+		lcd.print(blank);
 	}
 }
 

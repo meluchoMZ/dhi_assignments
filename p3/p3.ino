@@ -11,7 +11,6 @@
 #define BUTTON 7 
 #define LCD_CONTRAST 6
 #define SS 10
-#define LED_BLINK_ORDER 0b1000 // B = 0x1000; G = 0x0100; Y = 0x0010; R = 0x0001 Orde de cambio dos leds 
 #define LED_ROULETTE_MIN_TIME_MS 7000 // minimo tempo que duran os leds en ruleta
 #define LED_ROULETTE_MAX_TIME_MS 8500 // maximo tempo que duran os leds en ruleta
 #define LED_BLINK_DELAY 45 // retraso inicial dos leds da ruleta
@@ -20,6 +19,7 @@
 
 // inicio lcd e asignación de pins
 LiquidCrystal lcd(8,9,5,4,3,2);
+// orde de alternancia dos leds
 byte led_order[4] =  {0x1, 0x2, 0x4, 0x8};
 
 bool fire = false; //indica se hai que executar o sorteo
@@ -175,6 +175,7 @@ void raffle(void)
 }
 
 
+// pon a cantidade de premios restantes no display
 void update_lcd(void)
 {
 	clear_lcd();
@@ -196,6 +197,7 @@ void update_lcd(void)
 	lcd.print(EEPROM.read(0x3));
 }
 
+// imprime unha mensaxe cando non quedan premios
 void out_of_existences(void)
 {
 	clear_lcd();
@@ -205,6 +207,7 @@ void out_of_existences(void)
 	lcd.print("os premios");
 }
 
+// limpa o LCD
 void clear_lcd(void)
 {
 	char blank = ' ';
@@ -216,6 +219,7 @@ void clear_lcd(void)
 	}
 }
 
+// Resetea os bytes 0 a 3 da memoria EEPROM
 void reset_EEPROM(void)
 {
 	EEPROM.update(0x0, 0x1);

@@ -11,7 +11,7 @@
 #define BUTTON 7 
 #define LCD_CONTRAST 6
 #define SS 10
-#define LED_BLINK_ORDER 0b1000 // B = 0x1000; R = 0x0100; Y = 0x0010; G = 0x0001 Orde de cambio dos leds 
+#define LED_BLINK_ORDER 0b1000 // B = 0x1000; G = 0x0100; Y = 0x0010; R = 0x0001 Orde de cambio dos leds 
 #define LED_ROULETTE_MIN_TIME_MS 7000 // minimo tempo que duran os leds en ruleta
 #define LED_ROULETTE_MAX_TIME_MS 8500 // maximo tempo que duran os leds en ruleta
 #define LED_BLINK_DELAY 45 // retraso inicial dos leds da ruleta
@@ -20,6 +20,7 @@
 
 // inicio lcd e asignación de pins
 LiquidCrystal lcd(8,9,5,4,3,2);
+byte led_order[4] =  {0x1, 0x2, 0x4, 0x8};
 
 bool fire = false; //indica se hai que executar o sorteo
 
@@ -97,8 +98,9 @@ void raffle(void)
 {
 	// value e b son contadores
 	short value = 0x0, del = random(LED_ROULETTE_MIN_TIME_MS, LED_ROULETTE_MAX_TIME_MS);
-	byte b, winner;
+	byte b, b_old, winner;
 
+	update_lcd();
 	// calcula a o resultado da tirada
 	for (b = 0b0; b < EEPROM_VALID_BYTES; b++) {
 		value += EEPROM.read(b);
@@ -107,7 +109,6 @@ void raffle(void)
 		SPI.transfer(0xF);
 		digitalWrite(SS, HIGH);
 		digitalWrite(SS, LOW);
-		clear_lcd();
 		out_of_existences();
 		return;
 	}
@@ -122,20 +123,24 @@ void raffle(void)
 		}
 	}
 	value = 0x0;
-	// Efecto da ruleta de leds 
 	wdt_reset();
+	// purgase o latch
+	SPI.transfer(led_order[0x3]); digitalWrite(SS, HIGH); digitalWrite(SS, LOW);
+	b_old = 0x3;
+
+	// Efecto da ruleta de leds 
 	while (del > 0)
 	{
 		value += LED_BLINK_DELAY;
-		// purgase o latch do SN74HC595N
-		SPI.transfer(0x08); digitalWrite(SS, HIGH); digitalWrite(SS, LOW);
-		// a orde faise con desprazamentos de bits sobre unha macro
-		for (b = 0b0; b < LED_BLINK_ORDER >> 0b1; b++) {
-			if (SPI.transfer(LED_BLINK_ORDER >> b) != (LED_BLINK_ORDER >> b-0b1)) {
+		// acéndense os leds por orde e compróbase o bus
+		for (b = 0x0; b < 0x4; b++) {
+			if (SPI.transfer(led_order[b]) != led_order[b_old]) {
 				clear_lcd();
+				lcd.setCursor(0, 0);
 				lcd.print(SPI_ERROR);
 				return;
 			}
+			b_old = b;
 			digitalWrite(SS, HIGH);
 			digitalWrite(SS, LOW);
 			delay(LED_BLINK_DELAY+value);
@@ -144,21 +149,20 @@ void raffle(void)
 		wdt_reset();
 	}
 
-	Serial.println("funcionou");
 	// move o led ata o correspondente a o premio gañado 
-	while ((b%0b100) != winner)
-	{
-		if (SPI.transfer(LED_BLINK_ORDER >> ((b++)%0b100)) != (LED_BLINK_ORDER >> ((b-0b10)%0b100))) {
-			clear_lcd();
-			lcd.setCursor(0,0);
-			lcd.print(SPI_ERROR);
-			return;
+	if (b != winner) {
+		for (b = 0x0; b <= winner; b++) {
+			if (SPI.transfer(led_order[b]) != led_order[b_old]) {
+				clear_lcd(); lcd.setCursor(0,0);
+				lcd.print(SPI_ERROR); return;
+			}
+			digitalWrite(SS, HIGH); digitalWrite(SS, LOW);
+			b_old = b;
+			if (b != winner ) {delay(LED_BLINK_DELAY+value);}
+			wdt_reset();
 		}
-		digitalWrite(SS, HIGH);
-		digitalWrite(SS, LOW);
-		delay(LED_BLINK_DELAY+value);
-		wdt_reset();
 	}
+	wdt_reset();
 
 	// actualizase o lcd (se hai premios resta, senón devolve unha mensaxe de erro)
 	clear_lcd();
@@ -173,6 +177,7 @@ void raffle(void)
 
 void update_lcd(void)
 {
+	clear_lcd();
 	lcd.setCursor(1,0);
 	lcd.print("P1:");
 	lcd.setCursor(4,0);
@@ -193,6 +198,7 @@ void update_lcd(void)
 
 void out_of_existences(void)
 {
+	clear_lcd();
 	lcd.setCursor(0,0);
 	lcd.print("Esgotaronse");
 	lcd.setCursor(0,1);

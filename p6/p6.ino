@@ -17,6 +17,7 @@
 #define TMEAN 100 // tempo de promediado de ruido do potenciómetro
 #define SIGNAL_SELECTOR 0x02 // pin dixital 2. Ao premelo modifica o sinal utilizado
 #define FREQZ_SELECTOR 0x04 // pin dixital 4. Ao premelo modifica a frecuencia do sinal
+#define AMPLITUDE_FILTERING_INTERVAL 50 // mostras para o filtrado
 
 
 void interrupt_handler(void);
@@ -28,6 +29,8 @@ volatile float generated; // valores xerados dos sinais
 volatile short received; // valores recibidos dos sinais
 volatile byte ctg = 0x00; // contador de xeración
 volatile byte cts = 0x00; // contador de mostraxe
+volatile byte camp = 0x01; // contador de mostras de filtrado de amplitude
+volatile unsigned long amplitude = 0;
 
 void setup(void)
 {
@@ -57,11 +60,13 @@ void loop(void)
 		// para asegurar a depulsación ao non poder usar delay nin millis 
 		while (digitalRead(SIGNAL_SELECTOR) != HIGH){;}
 		while (digitalRead(SIGNAL_SELECTOR) != HIGH){;}
+		while (digitalRead(SIGNAL_SELECTOR) != HIGH){;}
 	}
 	if (f == LOW) {
 		// modifica a frecuencia
 		N = (N >= 1000) ? 100 : (N + 100);
 		// igual ca no caso de modificación do sinal
+		while (digitalRead(FREQZ_SELECTOR) != HIGH){;}
 		while (digitalRead(FREQZ_SELECTOR) != HIGH){;}
 		while (digitalRead(FREQZ_SELECTOR) != HIGH){;}
 	}
@@ -70,7 +75,6 @@ void loop(void)
 // manexador da interrupción do timer 2
 void interrupt_handler(void)
 {
-	byte amplitude;
 	// actualiza o contador de mostraxe
 	if (++n >= N) {
 		n = 0;
@@ -79,24 +83,30 @@ void interrupt_handler(void)
 	// xérase 1 mostra cada Tg*T milisegundos
 	if (++ctg >= Tg) {
 		// obtense a amplitude en función do potenciómetro e pásase de 10 a 7 bits
-		amplitude = map(analogRead(POTENTIOMETER), 0, 1023, 0, 127);
+		// úsase un filtro de media cun intervalo de 100 ms para o control de amplitude
+		if (++camp == AMPLITUDE_FILTERING_INTERVAL+1) {
+			amplitude = 0;
+			camp = 0x01;
+		}
+		amplitude += map(analogRead(POTENTIOMETER), 0, 1023, 0, 127);
+
 		switch (sig)
 		{
 			case 0x00:
 				// sinal senoidal
-				generated = 128+amplitude*sin(2*PI*n/N);
+				generated = 128+(amplitude/camp)*sin(2*PI*n/N);
 				break;
 			case 0x01:
 				// sinal triangular
-				generated = (n<(N/4)) ? (128-amplitude*(-4*(float)n/N)) : ((n<(3*N/4)) ? (128+amplitude*(2-4*(float)n/N)) : (128-amplitude*(4-4*(float)n/N)));
+				generated = (n<(N/4)) ? (128-(amplitude/camp)*(-4*(float)n/N)) : ((n<(3*N/4)) ? (128+(amplitude/camp)*(2-4*(float)n/N)) : (128-(amplitude/camp)*(4-4*(float)n/N)));
 				break;
 			case 0x02:
 				// sinal cadrada
-				generated = (n<N/2) ? (128+amplitude) : (128 - amplitude);
+				generated = (n<N/2) ? (128+(amplitude/camp)) : (128 - (amplitude/camp));
 				break;
 			case 0x03:
 				// sinal contínua
-				generated = 2*amplitude;
+				generated = 2*(amplitude/camp);
 				break;
 			default:
 				break;

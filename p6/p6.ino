@@ -61,6 +61,9 @@ void loop(void)
 		while (digitalRead(SIGNAL_SELECTOR) != HIGH){;}
 		while (digitalRead(SIGNAL_SELECTOR) != HIGH){;}
 		while (digitalRead(SIGNAL_SELECTOR) != HIGH){;}
+		delayMicroseconds(16383);
+		delayMicroseconds(16383);
+		delayMicroseconds(16383);
 	}
 	if (f == LOW) {
 		// modifica a frecuencia
@@ -69,6 +72,9 @@ void loop(void)
 		while (digitalRead(FREQZ_SELECTOR) != HIGH){;}
 		while (digitalRead(FREQZ_SELECTOR) != HIGH){;}
 		while (digitalRead(FREQZ_SELECTOR) != HIGH){;}
+		delayMicroseconds(16383);
+		delayMicroseconds(16383);
+		delayMicroseconds(16383);
 	}
 }
 

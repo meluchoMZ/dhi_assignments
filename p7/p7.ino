@@ -19,11 +19,10 @@ void interrupt_handler(void);
 void update_buffer(float value);
 void update_bcd(int value);
 
-volatile float amplitude = 0, temperature = 0; // acumulador amplitudes
+volatile float amplitude = 0, buffer_mean = 0, temperature = 0; // acumulador amplitudes
 volatile byte ampc = 0x01; // contador de mostras de amplitude para filtrado de frecuencias de rede eléctrica
 volatile byte genc = 0x00; // contador para a xeración de datos
 volatile float amp_buffer[5] = {0,0,0,0,0}; // buffer circular que para implementar o filtro de media
-volatile unsigned long time_delta = 0; // contador de tempos
 const byte bcd[7] = {3,4,5,6,7,8,9}; // BCD inputs a,b,c,d,e,f,g
 const byte multiplexing[4] = {10,11,12,13}; // números de esquerda a dereita
 const byte digits[10] = 
@@ -69,9 +68,8 @@ void update_buffer(float value)
 // manexador da interrupción
 void interrupt_handler(void)
 {
-	float Rm, logRm, Vm, buffer_mean;
+	float Rm, logRm, Vm, amp_mean;
 
-	time_delta += Ts; //actualízase o tempo que vai pasando
 
 	// filtrado de frecuencias cada 200 ms
 	if (++ampc == AMPLITUDE_FILTERING_INTERVAL+1) {
@@ -81,32 +79,33 @@ void interrupt_handler(void)
 	// lectura do valor de saída do termistor
 	amplitude += analogRead(THERMISTOR);
 	// actualizase o buffer circular
-	update_buffer(amplitude/ampc);
 
 	// actualízase a temperatura cada 0.2 s
 	if (++genc == Tg) {
 		genc = 0x00;
 		// aplícase o filtro de media
-		buffer_mean = (amp_buffer[0]+amp_buffer[1]+amp_buffer[2]+amp_buffer[3]+amp_buffer[4])/5;
+		amp_mean = amplitude/ampc;
 
 		// calcúlase a temperatura segundo o modelo Steinhart-Hart
-		Rm = (float) (10000*buffer_mean)/(1024-buffer_mean);
+		Rm = (float) (10000*amp_mean)/(1024-amp_mean);
 		logRm = log(Rm);
-		Vm = (float) (5*buffer_mean)/1024;
+		Vm = (float) (5*amp_mean)/1024;
 		temperature = (1/(A+B*logRm+C*logRm*logRm*logRm)) - (1000*Vm*Vm)/(K*Rm);
 		// paso a celsius
 		temperature -= 273.15;
 
+		update_buffer(temperature);
+		buffer_mean = (amp_buffer[0]+amp_buffer[1]+amp_buffer[2]+amp_buffer[3]+amp_buffer[4])/5;
 		// envíanse os datos polo porto serie
 		Serial.print("Time(ms): ");
-		Serial.print(time_delta, DEC);
+		Serial.print(millis(), DEC);
 		Serial.print(" Rm(ohm.): ");
-		Serial.print(Rm, DEC);
+		Serial.print(Rm, 2);
 		Serial.print(" T(ºC): ");
-		Serial.println(temperature, DEC);
+		Serial.println(buffer_mean, 2);
 	}
 	// conmútase o BCD cada 2 ms
-	update_bcd((int)temperature);
+	update_bcd((int)buffer_mean);
 }
 
 
